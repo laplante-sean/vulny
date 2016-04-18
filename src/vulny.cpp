@@ -13,7 +13,6 @@ static SocketServer* s;
 void exit_handler(int sig) {
 	cout << "Shutting down\n";
 	if (s) {
-		s->stop();
 		delete s;
 	}
 	exit(0);

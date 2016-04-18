@@ -6,21 +6,18 @@
 #include <mutex>
 #include <iostream>
 
+class SocketServerImpl;
+
 class SocketServer {
 public:
 	SocketServer(uint16_t p);
 	~SocketServer();
 public:
 	int run();
-	void stop();
 private:
-	void handleConnection(int c);
-	bool isRunning();
+	void handleConnection(int c, uint64_t id);
 private:
-	uint16_t port;
-	bool running;
-	int sock;
-	std::mutex objLock;
+	SocketServerImpl * pImpl;
 };
 
 #endif /* SOCKET_SERVER_H_ */

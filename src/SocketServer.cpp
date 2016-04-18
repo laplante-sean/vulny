@@ -1,74 +1,179 @@
 #include "SocketServer.h"
-#include "Game.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <memory>
+#include <unordered_map>
+#include <set>
+#include <string.h>
 
 using namespace std;
 
+static uint64_t connectionId = 0;
+
+struct connection {
+	int sock_fd;
+	std::thread * t;
+};
+
+class SocketServerImpl {
+public:
+	SocketServerImpl() :
+		port(), sock(), running(true), activeConnections() {
+		cleanupThread = std::thread(&SocketServerImpl::cleanup, this);
+	}
+	~SocketServerImpl(){
+		stop();
+		cleanupThread.join();
+		for (auto conn : activeConnections) {
+			uint64_t id = conn.first;
+			connection c = conn.second;
+			shutdown(c.sock_fd, SHUT_RDWR);
+			c.t->join();
+			delete c.t;
+		}
+		activeConnections.clear();
+		shutdown(sock,SHUT_RDWR);
+		close(sock);
+	}
+public:
+	void addConnection(int sock_fd, std::thread * t, uint64_t id) {
+		std::lock_guard<std::mutex> lock(objLock);
+		connection c;
+		c.sock_fd = sock_fd;
+		c.t = t;
+		activeConnections[id] = c;
+	}
+	void addInactiveConnection(uint64_t id) {
+		std::lock_guard<std::mutex> lock(objLock);
+		inactiveConnections.insert(id);
+	}
+	bool isRunning() const {
+		return running;
+	}
+	void stop() {
+		std::lock_guard<std::mutex> lock(objLock);
+		running = false;
+	}
+private:
+	void cleanup() {
+		cout << "Cleanup thread running\n";
+		while(isRunning()) {
+			objLock.lock();
+			if (inactiveConnections.size()) {
+				for (uint64_t id : inactiveConnections) {
+					cout << "Found connection: " << id << " for cleanup\n";
+					connection c = activeConnections[id];
+					if(c.t->joinable())
+						c.t->join();
+					delete c.t;
+					activeConnections.erase(id);
+					cout << "Connection " << id << " cleanup complete\n";
+				}
+				inactiveConnections.clear();
+			}
+			objLock.unlock();
+			sleep(1);
+		}
+		cout << "Cleanup thread exit\n";
+	}
+public:
+	uint16_t port;
+	int sock;
+private:
+	bool running;
+	std::mutex objLock;
+	std::unordered_map<uint64_t,connection> activeConnections;
+	std::set<uint64_t> inactiveConnections;
+	std::thread cleanupThread;
+};
+
 SocketServer::SocketServer(uint16_t p) :
-	port(p), running(true), sock(0)
-{}
+		pImpl(new SocketServerImpl()) {
+	pImpl->port = p;
+}
 
 SocketServer::~SocketServer() {
-	if (isRunning())
-		stop();
-	if (sock != -1)
-		close(sock);
+	delete pImpl;
 }
 
 int SocketServer::run() {
 	struct sockaddr_in server;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == -1) {
+	pImpl->sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (pImpl->sock == -1) {
 		cerr << "Could not create socket\n";
 		return 1;
 	}
 
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = INADDR_ANY;
-	server.sin_port = htons(port);
+	server.sin_port = htons(pImpl->port);
 
-	if (bind(sock,(struct sockaddr*)&server, sizeof(server)) < 0) {
-		cerr << "Could not bind to port: " << port << "\n";
-		close(sock);
+	if (bind(pImpl->sock,(struct sockaddr*)&server, sizeof(server)) < 0) {
+		cerr << "Could not bind to port: " << pImpl->port << "\n";
+		close(pImpl->sock);
 		return 1;
 	}
 
-	listen(sock, 15);
+	listen(pImpl->sock, 15);
 
-	while(isRunning()) {
+	while(pImpl->isRunning()) {
 		uint32_t size = sizeof(struct sockaddr_in);
 		struct sockaddr_in client;
 
 		cout << "Waiting for new connection\n";
-		int newsock = accept(sock, (struct sockaddr*)&client, &size);
+		int newsock = accept(pImpl->sock, (struct sockaddr*)&client, &size);
 
-		if (newsock != -1) {
-			std::thread(&SocketServer::handleConnection, this, newsock);
+		if (newsock != -1 && newsock != 0) {
+			pImpl->addConnection(
+				newsock,
+				new std::thread(&SocketServer::handleConnection, this, newsock, connectionId),
+				connectionId
+			);
+			connectionId++;
+		} else {
+			cout << "Error on accept(). Exit now\n";
+			break;
 		}
 	}
 
-	close(sock);
+	cout << "SocketServer Exit";
+	close(pImpl->sock);
 	return 0;
 }
 
-void SocketServer::stop() {
-	std::lock_guard<std::mutex> lock(objLock);
-	running = false;
-}
+void SocketServer::handleConnection(int sock_fd, uint64_t id) {
+	cout << "New connection " << id << "\n";
 
-bool SocketServer::isRunning() {
-	std::lock_guard<std::mutex> lock(objLock);
-	return running;
-}
+	const static char * msg = "Enter a command: ";
+	char recvBuf[1024] = {'\0'};
+	while(pImpl->isRunning()) {
+		memset(recvBuf, 0, sizeof(recvBuf));
+		if (send(sock_fd,msg,strlen(msg),0) == -1) {
+			cerr << "Failed to send data for connection " << id << "\n";
+			break;
+		}
+		int recvd = recv(sock_fd,recvBuf,sizeof(recvBuf),0);
+		if (recvd == 0)
+			break;
+		else if (recvd == -1) {
+			cerr << "Failed to receive data for connection " << id << "\n";
+			break;
+		}
 
-void SocketServer::handleConnection(int c) {
-	while(isRunning()) {
-		cout << "Thread running\n";
+		for (int i = 0; i < recvd; ++i) {
+			printf("%c",recvBuf[i]);
+		}
+		cout << "\n";
 	}
+
+	cout << "Connection " << id << " closed\n";
+	pImpl->addInactiveConnection(id);
+	shutdown(sock_fd, SHUT_RDWR);
+	close(sock_fd);
+	return;
 }
 
