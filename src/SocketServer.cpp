@@ -175,7 +175,7 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 			const static char * dumby = "No! Just the host, no commands. Don't try to be sneaky. https://github.com/vix597/vulny";
 			send(sock_fd, dumby, strlen(dumby),0);
 		} else {
-			int status = system(cmd);
+			int status = system(cmd.c_str());
 
 			if (status == 0) {
 				cout << "Success: " << cmd << "\n";
