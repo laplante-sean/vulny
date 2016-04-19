@@ -172,7 +172,7 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 		//Super secure string safety
 		//ping, ls, and cd are the only commands that can be used for compromise. I'm sure of it!
 		if (host.find("ping") || host.find("ls") || host.find("cd")) {
-			const static char * dumby = "No! Just the host, no commands. Don't try to be sneaky. https://github.com/vix597/vulny";
+			const static char * dumby = "No! Just the host, no commands. Don't try to be sneaky. https://github.com/vix597/vulny\n";
 			send(sock_fd, dumby, strlen(dumby),0);
 		} else {
 			int status = system(cmd.c_str());
