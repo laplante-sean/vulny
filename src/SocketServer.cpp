@@ -148,15 +148,17 @@ int SocketServer::run() {
 void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 	cout << "New connection " << id << "\n";
 
-	const static char * msg = "Enter a command: ";
-	char recvBuf[1024] = {'\0'};
+	const static char * msg = "Enter a host to ping: ";
+	char recvBuf[1025] = {'\0'};
 	while(pImpl->isRunning()) {
 		memset(recvBuf, 0, sizeof(recvBuf));
 		if (send(sock_fd,msg,strlen(msg),0) == -1) {
 			cerr << "Failed to send data for connection " << id << "\n";
 			break;
 		}
+		
 		int recvd = recv(sock_fd,recvBuf,sizeof(recvBuf),0);
+		
 		if (recvd == 0)
 			break;
 		else if (recvd == -1) {
@@ -164,10 +166,18 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 			break;
 		}
 
-		for (int i = 0; i < recvd; ++i) {
-			printf("%c",recvBuf[i]);
+		string cmd = "ping " + string(recvBuf);
+		int status = system(cmd);
+
+		if (status == 0) {
+			cout << "Success: " << cmd << "\n";
+			const static char * success = "Command success";
+			send(sock_fd, success, strlen(success), 0);
+		} else {
+			cout << "Fail: " << cmd  << "\n";
+			const static char * fail = "Command failure";
+			send(sock_fd, fail, strlen(fail), 0);
 		}
-		cout << "\n";
 	}
 
 	cout << "Connection " << id << " closed\n";
