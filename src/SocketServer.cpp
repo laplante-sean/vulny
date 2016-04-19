@@ -166,17 +166,26 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 			break;
 		}
 
+		string host(recvBuf);
 		string cmd = "ping " + string(recvBuf);
-		int status = system(cmd);
 
-		if (status == 0) {
-			cout << "Success: " << cmd << "\n";
-			const static char * success = "Command success";
-			send(sock_fd, success, strlen(success), 0);
+		//Super secure string safety
+		//ping, ls, and cd are the only commands that can be used for compromise. I'm sure of it!
+		if (host.find("ping") || host.find("ls") || host.find("cd")) {
+			const static char * dumby = "No! Just the host, no commands. Don't try to be sneaky. https://github.com/vix597/vulny";
+			send(sock_fd, dumby, strlen(dumby),0);
 		} else {
-			cout << "Fail: " << cmd  << "\n";
-			const static char * fail = "Command failure";
-			send(sock_fd, fail, strlen(fail), 0);
+			int status = system(cmd);
+
+			if (status == 0) {
+				cout << "Success: " << cmd << "\n";
+				const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.";
+				send(sock_fd, success, strlen(success), 0);
+			} else {
+				cout << "Fail: " << cmd  << "\n";
+				const static char * fail = "Command failure";
+				send(sock_fd, fail, strlen(fail), 0);
+			}
 		}
 	}
 
