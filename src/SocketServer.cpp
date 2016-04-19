@@ -167,7 +167,7 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 		}
 
 		string host(recvBuf);
-		string cmd = "ping " + string(recvBuf);
+		string cmd = "ping -c 3" + string(recvBuf);
 
 		//Super secure string safety
 		//ping, ls, and cd are the only commands that can be used for compromise. I'm sure of it!
