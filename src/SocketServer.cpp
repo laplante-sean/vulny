@@ -179,11 +179,11 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 
 			if (status == 0) {
 				cout << "Success: " << cmd << "\n";
-				const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.";
+				const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.\n";
 				send(sock_fd, success, strlen(success), 0);
 			} else {
 				cout << "Fail: " << cmd  << "\n";
-				const static char * fail = "Command failure";
+				const static char * fail = "Command failure\n";
 				send(sock_fd, fail, strlen(fail), 0);
 			}
 		}
