@@ -9,6 +9,8 @@
 #include <set>
 #include <string.h>
 
+#include <boost/algorithm/string.hpp>
+
 using namespace std;
 
 static uint64_t connectionId = 0;
@@ -167,22 +169,58 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 		}
 
 		string host(recvBuf);
-		string cmd = "ping -c 3 " + string(recvBuf);
+		vector<string> parts;
+		boost::split(parts, host, boost::is_space(), boost::token_compress_on);
 
-		//Super secure string safety
-		//ping, ls, and cd are the only commands that can be used for compromise. I'm sure of it!
-		if (host.compare("ping") == 0 || host.compare("ls") == 0 || host.compare("cd") == 0) {
-			const static char * dumby = "No! Just the host, no commands. Don't try to be sneaky. https://github.com/vix597/vulny\n";
-			send(sock_fd, dumby, strlen(dumby),0);
+		bool sneaky = false;
+		bool extra_sneaky = false;
+		for (string& part : parts) {
+			boost::trim(part);
+
+			//Super secure string safety
+			//ping, ls, and cd and some others
+			//are the only commands that can be used for compromise. I'm sure of it!
+			if (boost::contains(part,"ping") ||
+				boost::contains(part,"ls") ||
+				boost::contains(part,"cd") ||
+				boost::contains(part,"nc") ||
+				boost::contains(part,"ncat") ||
+				boost::contains(part,"ruby")) {
+				sneaky = true;
+			} else if(part.compare(";") == 0) {
+				extra_sneaky = true;
+			}
+		}
+
+		//Throw and & on the end so they don't hack the system. Super secure.
+		string cmd = "ping -c 3 ";
+
+		//put it back together
+		for (const string& part : parts) {
+			cmd += part + " ";
+		}
+		cmd += "&";
+		boost::trim(cmd);
+
+		cout << cmd << "\n";
+
+		if (extra_sneaky) {
+			cout << "Extra sneaky\n";
+			const static char * extra_dumby = "So, you wanna run more than one command and you think a little ';' is gonna help you. WRONG!! YOU LOOSE! GOOD DAY SIR!\n";
+			send(sock_fd, extra_dumby, strlen(extra_dumby), 0);
+		}else if (sneaky) {
+			cout << "Sneaky\n";
+			const static char * dumby = "No! Just a host! Don't try commands. Don't try to be sneaky...you're not. This is real life. Stop hacking! https://github.com/vix597/vulny\n";
+			send(sock_fd, dumby, strlen(dumby), 0);
 		} else {
 			int status = system(cmd.c_str());
 
 			if (status == 0) {
-				cout << "Success: " << cmd << "\n";
+				cout << "Success\n";
 				const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.\n";
 				send(sock_fd, success, strlen(success), 0);
 			} else {
-				cout << "Fail: " << cmd  << "\n";
+				cout << "Fail\n";
 				const static char * fail = "Command failure\n";
 				send(sock_fd, fail, strlen(fail), 0);
 			}
@@ -195,4 +233,3 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 	close(sock_fd);
 	return;
 }
-
