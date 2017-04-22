@@ -7,7 +7,11 @@
 #include <memory>
 #include <unordered_map>
 #include <set>
-#include <string.h>
+#include <string>
+#include <stdexcept>
+#include <array>
+#include <iostream>
+#include <cstdio>
 
 #include <boost/algorithm/string.hpp>
 
@@ -19,6 +23,18 @@ struct connection {
 	int sock_fd;
 	std::thread * t;
 };
+
+static std::string exec(const char * cmd) {
+	std::array<char, 128>buffer;
+	std::string result;
+	std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+	if (!pipe) throw std::runtime_error("popen() failed!");
+	while(!feof(pipe.get())) {
+		if (fgets(buffer.data(), 128, pipe.get()) != NULL)
+			result += buffer.data();
+	}
+	return result;
+}
 
 class SocketServerImpl {
 public:
@@ -199,7 +215,7 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 		for (const string& part : parts) {
 			cmd += part + " ";
 		}
-		cmd += "&";
+		//cmd += "&";
 		boost::trim(cmd);
 
 		cout << cmd << "\n";
@@ -213,17 +229,19 @@ void SocketServer::handleConnection(int sock_fd, uint64_t id) {
 			const static char * dumby = "No! Just a host! Don't try commands. Don't try to be sneaky...you're not. This is real life. Stop hacking! https://github.com/vix597/vulny\n";
 			send(sock_fd, dumby, strlen(dumby), 0);
 		} else {
-			int status = system(cmd.c_str());
+			//int status = system(cmd.c_str());
 
-			if (status == 0) {
-				cout << "Success\n";
-				const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.\n";
-				send(sock_fd, success, strlen(success), 0);
-			} else {
-				cout << "Fail\n";
-				const static char * fail = "Command failure\n";
-				send(sock_fd, fail, strlen(fail), 0);
-			}
+			std::string result = exec(cmd.c_str());
+			send(sock_fd, result.c_str(), result.length(), 0);
+			//if (status == 0) {
+				//cout << "Success\n";
+				//const static char * success = "Command success. Congratulation on using ping! You are a true master of the computer.\n";
+			//	send(sock_fd, success, strlen(success), 0);
+			//} else {
+			//	cout << "Fail\n";
+			//	const static char * fail = "Command failure\n";
+			//	send(sock_fd, fail, strlen(fail), 0);
+			//}
 		}
 	}
 
